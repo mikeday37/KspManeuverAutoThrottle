@@ -20,7 +20,7 @@ This mod is very lightweight and easy on memory.  The mod performs no allocation
 
 ## Installation
 
-Copy the LuxSublima folder to your KSP "GameData" subfolder.  For example, in my case this results in the following destination files:
+Build the solution in Visual Studio, then copy the "out\LuxSublima" folder to your KSP "GameData" subfolder.  For example, in my case this results in the following destination files:
 
 ```
 C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program\GameData\LuxSublima\ManeuverAutoThrottle\LICENSE.txt
