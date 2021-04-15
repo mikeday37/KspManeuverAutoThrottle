@@ -1,6 +1,8 @@
 # KspManeuverAutoThrottle
 A small plugin for Kerbal Space Program to optionally set max thrust at maneuver start, and gradually lower throttle toward the end for an accurate burn.
 
+WARNING: This is a work in progress.  Edge conditions still need to be resolved.  Current logic will result in inaccurate burns in some cases.
+
 UI is very simple - just a toggle button added to the application bar.  Plugin does nothing if the button is not enabled/checked.
 
 When enabled, the following occurs:
@@ -37,6 +39,8 @@ C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program\GameData\LuxS
 
 2. Rarely, it will not successfully warp to the next maneuver node after completing the prior.  If this happens, just toggle the button to reset the logic, and it should be fine.
 
-The results are NOT as accurate as MechJeb's automatic maneuvering, but they're good enough for very satisfactory results most of the time.  My goal was only to make it about as accurate as my own manual efforts.  I got tired of repeatedly staring intently at the same tiny bits of UI for the most critical timing in the game, and decided to automate it.   :-)
+3. Vessels with very high or very low acceleration are currently not well handled during slowdown.  Use at your own risk!
+
+The results are NOT as accurate as MechJeb's automatic maneuvering, but they're good enough for very satisfactory results most of the time when piloting ships in the middle range of max acceleration.  My goal was only to make it about as accurate as my own manual efforts.  I got tired of repeatedly staring intently at the same tiny bits of UI for the most critical timing in the game, and decided to automate it.   :-)
 
 Enjoy!
