@@ -17,3 +17,11 @@ During step 5, there is also a failsafe abort:  If the realtime burn vector drif
 You can uncheck the button at any time to disable the above sequence, but then you'll have to shut off throttle (if engaged) yourself.  This allows you to freely turn the auto throttle logic on and off when you want it, so you can still fine tune manually whenever you want.
 
 This mod is very lightweight and easy on memory.  The mod performs no allocations on the heap during any Update events, so this mod should not suffer from the stuttering/freezing problems encountered when using larger mods that enable this type of functionality.
+
+## Known Issues
+
+Rarely, it will not successfully warp to the next maneuver node after completing the prior.  If this happens, just toggle the button to reset the logic, and it should be fine.
+
+The results are NOT as accurate as MechJeb's automatic maneuvering, but they're good enough for very satisfactory results most of the time.  My goal was only to make it about as accurate as my own manual efforts.  I got tired of repeatedly staring intently at the same tiny bits of UI for the most critical timing in the game, and decided to automate it.  :)
+
+Enjoy!
