@@ -17,14 +17,14 @@ namespace ManeuverAutoThrottle
 		/// </summary>
 		public static void TimeWarpToUT(double universalTime)
 		{
-			TimeWarp.fetch.WarpTo(universalTime);
+			TimeWarp.fetch.WarpTo(universalTime, 9, 1);
 		}
 
 		/// <summary>
 		/// Sets the main throttle.  Value will be clamped to between 0.0f (off) and 1.0f (full throttle).
 		/// If the attempt throws an exception, the exception will be hidden.
 		/// </summary>
-		public static void SetThrottle(float throttle)
+		public static void SetThrottle(float throttle, bool verbose = true)
 		{
 			try
 			{
@@ -34,13 +34,18 @@ namespace ManeuverAutoThrottle
 				if (throttle < 0.0f)
 					throttle = 0.0f;
 				FlightInputHandler.state.mainThrottle = throttle;
-				LogUtility.Log($"Set Throttle: {throttle:0.####} -- (Prev = {prevThrottle}, Cur = {FlightInputHandler.state.mainThrottle})");
+
+				if (verbose)
+					LogUtility.Log($"Set Throttle: {throttle:0.####} -- (Prev = {prevThrottle}, Cur = {FlightInputHandler.state.mainThrottle})");
 			}
 			catch (Exception ex)
 			{
-				LogUtility.Log($"SetThrottle({throttle}) threw an exception: {ex.Message ?? "(null)"}");
+				if (verbose)
+					LogUtility.Log($"SetThrottle({throttle}) threw an exception: {ex.Message ?? "(null)"}");
 			}
 		}
+
+		public static double? LastSetThottleLogUT {get; private set;}
 
 		/// <summary>
 		/// Deletes the next planned maneuver node for the active vessel, if any, otherwise does nothing.

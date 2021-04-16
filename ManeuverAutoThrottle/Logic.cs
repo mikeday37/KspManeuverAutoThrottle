@@ -12,193 +12,496 @@ namespace ManeuverAutoThrottle
 	/// </summary>
 	public class Logic
 	{
-		public void Reset()
-		{
-			bool redrawRequired = MasterSwitch.IsEnabled;
-			LastActiveVesselPersistentId = 0;
-			AutoPilotSet = false;
-			LastSetThrottle = float.NaN;
-			DisabledManeuverHold = false;
-			MasterSwitch.Disable();
-			State = LogicState.Idle;
-			BurnLog.Instance.Reset();
-			if (redrawRequired)
-				RedrawAction?.Invoke();
-		}
-
-		public Action RedrawAction {get;set;}
-
 		public static readonly Logic Instance = new Logic();
+		public Action RedrawAction {get;set;}
 
 		private Logic()
 		{
-			LastActiveVesselPersistentId = 0;
-			AutoPilotSet = false;
-			LastSetThrottle = float.NaN;
+			ResetLogic();
 		}
 
-		public uint LastActiveVesselPersistentId {get; private set;}
-		public bool AutoPilotSet {get; private set;}
-		public float LastSetThrottle {get; private set;}
-		public double LastNextManeuverRemainingDeltaV {get; private set;}
-		public bool DisabledManeuverHold {get; private set;}
-
-		public void Tick()
+		/// <summary>
+		/// Resets the entire logic state machine and the UI to be completely idle/disabled.
+		/// </summary>
+		public void Reset()
 		{
-			// handle reset on change vessel
-			if (LastActiveVesselPersistentId != KspVars.ActiveVesselPersistentId)
-				Reset();
-			LastActiveVesselPersistentId = KspVars.ActiveVesselPersistentId;
-			
-			// don't allow the plugin to enable if there's no maneuver node
-			if (MasterSwitch.IsEnabled && !KspVars.IsManeuverPlanned)
-			{
-				Reset();
-				return;
-			}
-
-			// reset if we were in a non-idle logic state but the plugin is disabled
-			if (!MasterSwitch.IsEnabled && State != LogicState.Idle)
-			{
-				Reset();
-				return;
-			}
-
-			// if not both enabled and there's a maneuver node, there's nothing to do
-			if (!(MasterSwitch.IsEnabled && KspVars.IsManeuverPlanned))
-				return;
-
-			// if not already set, enable autopilot
-			if (!AutoPilotSet)
-			{
-				KspCommands.EnableAutoPilotManeuverHold();
-				DisabledManeuverHold = false;
-				AutoPilotSet = true;
-			}
-
-			// if warping state but we're no longer warping, enter waiting state
-			if (State == LogicState.WarpingToManeuver && KspVars.CurrentWarpStatus != KspVars.WarpStatus.Fast)
-				State = LogicState.WaitToStart;
-
-			// get time to burn
-			var timeToStartBurn = KspVars.NextManeuverBurnStartUT - KspVars.CurrentUT;
-
-			// if state idle
-			if (State == LogicState.Idle)
-			{
-				// if the time is greater than the padding, warp unless aim is off
-				if (timeToStartBurn > Settings.WarpSecondsBeforeBurn && KspVars.NextManeuverOffAngle < Settings.MaxManeuverOffAnglePreWarp)
-				{
-					KspCommands.TimeWarpToUT(KspVars.NextManeuverBurnStartUT - Settings.WarpSecondsBeforeBurn);
-					State = LogicState.WarpingToManeuver;
-					return;
-				}
-				
-				// otherwise, if time not arrived but within padding, wait
-				if (timeToStartBurn > 0.0 && timeToStartBurn <= Settings.WarpSecondsBeforeBurn)
-				{
-					State = LogicState.WaitToStart;
-					return;
-				}
-			}
-
-			// if not burning but time has arrived, start the burn
-			if (State != LogicState.Burning && timeToStartBurn <= 0.0)
-			{
-				// save the burn vector
-				OriginalBurnVector = KspVars.NextManeuverBurnVector;
-
-				// save the deltaV remaining
-				LastNextManeuverRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
-
-				// set throttle to max if not already set
-				if (KspVars.CurrentThrottle == 0.0f)
-					KspCommands.SetThrottle(1.0f);
-
-				// set state to burning
-				State = LogicState.Burning;
-			}
-
-			// if now burning, handle end of burn
-			if (State == LogicState.Burning)
-			{
-				// if the seconds remain are below the threshold, switch to SAS rather than maneuver hold
-				// (because the maneuver vector gets really inaccurate close to the end of the burn)
-				if (BurnLog.Instance.EstimatesValid && AutoPilotSet && !DisabledManeuverHold
-					  && BurnLog.Instance.EstimatedBurnTimeRemainingAtCurrentThrottle <= Settings.SecondsRemainingStabilityAssistThreshold)
-				{
-					KspCommands.EnableAutoPilotStabilityAssist();
-					DisabledManeuverHold = true;
-				}
-
-				// stop the burn if either the remaining delta V is below the setting,
-				// or the burn vector has diverged too far from the original (which would mean we probably overshot the maneuver)
-				bool stopRemainingDeltaVIncreasing = (KspVars.NextManeuverRemainingDeltaV - LastNextManeuverRemainingDeltaV) > Settings.RemainingDeltaVIncreaseDetectionSafety;
-				LastNextManeuverRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
-				bool stopReachedGoal = KspVars.NextManeuverRemainingDeltaV <= Settings.MaxRemainingDeltaVGoal;
-				bool stop = stopRemainingDeltaVIncreasing || stopReachedGoal;
-				if (stop)
-				{
-					// log some useful info
-					LogUtility.Log($"Stop: ReachedGoal = {stopReachedGoal}, DeltaVIncreasing = {stopRemainingDeltaVIncreasing}");
-					LogUtility.Log($"Final Remaining DeltaV: {KspVars.NextManeuverRemainingDeltaV}");
-
-					// kill throttle
-					KspCommands.SetThrottle(0.0f);
-
-					// otherwise, delete the maneuver we just completed
-					KspCommands.DeleteNextManeuverNode();
-
-					// if there are no further maneuver nodes, reset
-					if (!KspVars.IsManeuverPlanned)
-					{
-						Reset();
-						return;
-					}
-
-					// otherwise go to the idle state but don't disable the plugin, so we'll perform the next maneuver
-					State = LogicState.Idle;
-
-					// but clear the set autopilot flag so we'll set it again next time around
-					AutoPilotSet = false;
-
-					return;
-				}
-
-				// finally, if still burning, lower throttle appropriately if we have good estimates
-				if (BurnLog.Instance.EstimatesValid)
-					for (int i = 0; i < Settings.LowerThrottleRamp.Length; i++)
-						if (BurnLog.Instance.EstimatedBurnTimeRemainingAtCurrentThrottle <= Settings.LowerThrottleRamp[i].secondsRemaining
-								&& KspVars.CurrentThrottle > (Settings.LowerThrottleRamp[i].maxThrottle + Settings.ThrottleCheckSafetyMargin))
-							KspCommands.SetThrottle(Settings.LowerThrottleRamp[i].maxThrottle);
-			}
-		}
-
-		public Vector3d OriginalBurnVector {get;set;}
-
-		private LogicState _state = LogicState.Idle;
-		public LogicState State
-		{
-			get {return _state;}
-		
-			set
-			{
-				if (_state == value)
-					return;
-
-				LogUtility.Log($"State Change:  From = {_state}, To = {value}");
-
-				_state = value;
-			}
+			bool redrawRequired = MasterSwitch.IsEnabled;
+			BurnLog.Instance.Reset();
+			LastActiveVesselPersistentId = null;
+			ResetLogic();
+			MasterSwitch.Disable();
+			if (redrawRequired)
+				RedrawAction?.Invoke();
 		}
 
 		public enum LogicState
 		{
 			Idle = 0,
-			WarpingToManeuver = 1,
-			WaitToStart = 2,
-			Burning = 3,
-			Aiming = 4
+
+			FarAim = 1010,
+			FarAimStabilize = 1020,
+
+			FarWarpStart = 2010,
+			FarWarpWait = 2020,
+			FarWarpRest = 2030,
+
+			NearAim = 3010,
+			NearAimStabilize = 3020,
+
+			NearWarpStart = 4010,
+			NearWarpWait = 4020,
+			NearWarpRest = 4030,
+			
+			Countdown = 5010,
+
+			ThrottleUp = 6010,
+			ThrottleMax = 6020,
+			ThrottleDown = 6030,
+			ThrottleZero = 6040,
+
+			Done = 7010,
+		}
+
+		public LogicState CurrentState {get; private set;}
+		public LogicState? NextState {get; private set;}
+		public bool StateChanged {get; private set;}
+
+		public ulong FixedUpdateCountInState {get; private set;}
+		public ulong LateUpdateCountInState {get; private set;}
+		public double StateAgeUT {get; private set;}
+		public double StateEnteredUT {get; private set;}
+
+		public uint? LastActiveVesselPersistentId {get; private set;}
+
+		/// <summary>
+		/// Resets the logic state machine (but not the burn log) without affecting UI.
+		/// </summary>
+		void ResetLogic()
+		{
+			CurrentState = LogicState.Idle;
+			ResetCurrentState();
+		}
+
+		/// <summary>
+		/// Resets the current state, by clearing NextState, StateChanged, and the update counters,
+		/// and resets StateAgeUT to zero and StateEnteredUT to current UT.
+		/// </summary>
+		void ResetCurrentState()
+		{
+			NextState = null;
+			StateChanged = false;
+
+			FixedUpdateCountInState = 0;
+			LateUpdateCountInState = 0;
+			StateAgeUT = 0;
+			StateEnteredUT = KspVars.CurrentUT;
+		}
+
+		public void OnFixedUpdate()
+		{
+			// increaes fixed update count
+			FixedUpdateCountInState++;
+
+			// log burn variables if we're enabled and burning in order to get required estimates
+			if (MasterSwitch.IsEnabled && KspVars.CurrentThrottle > 0.0f)
+				BurnLog.Instance.RecordAndEstimate();
+			else if (BurnLog.Instance.EstimatesValid) // otherwise if estimates were previously valid, reset the log
+				BurnLog.Instance.Reset();
+		}
+
+		/// <summary>
+		/// Implements the core state machine, handling common state transition logic and dispatching for specific states.
+		/// </summary>
+		public void OnLateUpdate()
+		{
+			// reset if vessel changed while enabled
+			if (MasterSwitch.IsEnabled
+					&& 
+					(
+						!LastActiveVesselPersistentId.HasValue
+						|| LastActiveVesselPersistentId.Value != KspVars.ActiveVesselPersistentId
+					)
+				)
+			{
+				LogUtility.Log("Vessel Changed - Resetting.");
+				Reset();
+				return;
+			}
+			LastActiveVesselPersistentId = KspVars.ActiveVesselPersistentId;
+
+			// if master switch is enabled without a maneuver,
+			// and current state is not Done and next state is not Idle
+			// reset and don't go any further
+			if ((MasterSwitch.IsEnabled && !KspVars.IsManeuverPlanned)
+				&& CurrentState != LogicState.Done && !(NextState.HasValue && NextState.Value == LogicState.Idle))
+			{
+				LogUtility.Log("Cannot engage - No maneuver planned - Resetting.");
+				Reset();
+				return;
+			}
+				
+			// switch to idle state if in any other state while master switch is disabled
+			if (CurrentState != LogicState.Idle && !MasterSwitch.IsEnabled)
+				NextState = LogicState.Idle;
+
+			// if transitioning state
+			if (NextState.HasValue && NextState.Value != CurrentState)
+			{
+				// if going idle, do a full reset
+				if (NextState.Value == LogicState.Idle)
+				{
+					LogUtility.Log("Going Idle - Resetting.");
+					Reset();
+					return;
+				}
+				else
+				{
+					// otherwise, set next as current, reset the state tracking vars, and set the StateChanged flag
+					var priorState = CurrentState;
+					CurrentState = NextState.Value;
+					ResetCurrentState();
+					StateChanged = true;
+					LogUtility.Log($"State Changed --> {CurrentState}");
+				}
+			}
+			else
+			{
+				// otherwise (when not transitioning state) clear the StateChanged flag and calculate state age
+				StateChanged = false;
+				StateAgeUT = KspVars.CurrentUT - StateEnteredUT;
+			}
+
+			// increment late update count
+			LateUpdateCountInState++;
+
+			// handle current state
+			switch (CurrentState)
+			{
+				case LogicState.Idle: ImplementState_Idle(); break;
+
+				case LogicState.FarAim: ImplementState_FarAim(); break;
+				case LogicState.FarAimStabilize: ImplementState_FarAimStabilize(); break;
+
+				case LogicState.FarWarpStart: ImplementState_FarWarpStart(); break;
+				case LogicState.FarWarpWait: ImplementState_FarWarpWait(); break;
+				case LogicState.FarWarpRest: ImplementState_FarWarpRest(); break;
+
+				case LogicState.NearAim: ImplementState_NearAim(); break;
+				case LogicState.NearAimStabilize: ImplementState_NearAimStabilize(); break;
+
+				case LogicState.NearWarpStart: ImplementState_NearWarpStart(); break;
+				case LogicState.NearWarpWait: ImplementState_NearWarpWait(); break;
+				case LogicState.NearWarpRest: ImplementState_NearWarpRest(); break;
+			
+				case LogicState.Countdown: ImplementState_Countdown(); break;
+
+				case LogicState.ThrottleUp: ImplementState_ThrottleUp(); break;
+				case LogicState.ThrottleMax: ImplementState_ThrottleMax(); break;
+				case LogicState.ThrottleDown: ImplementState_ThrottleDown(); break;
+				case LogicState.ThrottleZero: ImplementState_ThrottleZero(); break;
+
+				case LogicState.Done: ImplementState_Done(); break;
+			}
+		}
+
+		void ImplementState_Idle()
+		{
+			if (MasterSwitch.IsEnabled && KspVars.IsManeuverPlanned)
+			{
+				LogUtility.Log("ManeuverAutoThrottle Engaged...");
+				NextState = LogicState.FarAim;
+			}
+		}
+
+		bool AreStabilizationSettingsAchieved(StabilizationSettings stabilizationSettings)
+		{
+			return
+				FixedUpdateCountInState >= stabilizationSettings.MinFixedUpdates
+				&& LateUpdateCountInState >= stabilizationSettings.MinLateUpdates
+				&& StateAgeUT >= stabilizationSettings.MinUTPassed;
+		}
+
+		void CommonStateLogic_Aim(LogicState aimStabilizationState)
+		{
+			if (StateChanged && Settings.EnableManeuverHold)
+				KspCommands.EnableAutoPilotManeuverHold();
+
+			if (KspVars.NextManeuverOffAngle <= Settings.MaxAimErrorAngle)
+				NextState = aimStabilizationState;
+		}
+
+		void CommonStateLogic_AimStabilize(LogicState postAimState)
+		{
+			if (KspVars.NextManeuverOffAngle > Settings.MaxAimErrorAngle)
+				ResetCurrentState();
+			else if (AreStabilizationSettingsAchieved(Settings.AimStabilization))
+				NextState = postAimState;
+		}
+
+		public ulong? LastWarpRetryLateUpdateCount {get; private set;}
+
+		void CommonStateLogic_WarpStart(double burnStartMarginSeconds, LogicState warpWaitState, LogicState skippedWarpState)
+		{
+			// don't prevent first attempt to warp per entry into this state
+			if (StateChanged)
+				LastWarpRetryLateUpdateCount = null;
+
+			if (KspVars.CurrentWarpStatus == KspVars.WarpStatus.Fast)
+			{
+				// just wait until the warp ends if already warping
+				NextState = warpWaitState;
+				return;
+			}
+
+			var timeTilStart = KspVars.TimeToNextManeuverBurnStartUT;
+
+			// skip warp entirely if we're already within the burn start margin
+			if (timeTilStart <= burnStartMarginSeconds)
+			{
+				NextState = skippedWarpState;
+			}
+			else
+			{
+				// otherwise, start the warp, but don't retry during the same state unless sufficient updates have passed
+				// (prevents spamming with "already warping" messages)
+				if (!LastWarpRetryLateUpdateCount.HasValue || LateUpdateCountInState - LastWarpRetryLateUpdateCount.Value >= Settings.MinWarpRetryLateUpdateDelay)
+				{
+					KspCommands.TimeWarpToUT(KspVars.CurrentUT + timeTilStart - burnStartMarginSeconds);
+					LastWarpRetryLateUpdateCount = LateUpdateCountInState;
+				}
+
+				// transition to wait state if actually warping
+				if (KspVars.CurrentWarpStatus == KspVars.WarpStatus.Fast)
+					NextState = warpWaitState;
+			}
+		}
+
+		void CommonStateLogic_WarpWait(double burnStartMarginSeconds, LogicState restState)
+		{
+			if (!StateChanged
+					&& KspVars.CurrentWarpStatus != KspVars.WarpStatus.Fast
+					&& KspVars.TimeToNextManeuverBurnStartUT <= burnStartMarginSeconds
+				)
+				NextState = restState;
+		}
+
+		void CommonStateLogic_WarpRest(StabilizationSettings restSettings, LogicState nextState)
+		{
+			if (AreStabilizationSettingsAchieved(restSettings))
+				NextState = nextState;
+		}
+
+		void ImplementState_FarAim()
+		{
+			CommonStateLogic_Aim(
+				aimStabilizationState: LogicState.FarAimStabilize
+			);
+		}
+
+		void ImplementState_FarAimStabilize()
+		{
+			CommonStateLogic_AimStabilize(
+				postAimState: LogicState.FarWarpStart
+			);
+		}
+
+		void ImplementState_FarWarpStart()
+		{
+			CommonStateLogic_WarpStart(
+				burnStartMarginSeconds: Settings.FarWarpBurnStartMarginSeconds,
+				warpWaitState: LogicState.FarWarpWait,
+				skippedWarpState: LogicState.NearAim
+			);
+		}
+
+		void ImplementState_FarWarpWait()
+		{
+			CommonStateLogic_WarpWait(
+				burnStartMarginSeconds: Settings.FarWarpBurnStartMarginSeconds,
+				restState: LogicState.FarWarpRest
+			);
+		}
+
+		void ImplementState_FarWarpRest()
+		{
+			CommonStateLogic_WarpRest(
+				restSettings: Settings.FarWarpRestSettings,
+				nextState: LogicState.NearAim
+			);
+		}
+
+		void ImplementState_NearAim()
+		{
+			CommonStateLogic_Aim(
+				aimStabilizationState: LogicState.NearAimStabilize
+			);
+		}
+
+		void ImplementState_NearAimStabilize()
+		{
+			CommonStateLogic_AimStabilize(
+				postAimState: LogicState.NearWarpStart
+			);
+		}
+
+		void ImplementState_NearWarpStart()
+		{
+			CommonStateLogic_WarpStart(
+				burnStartMarginSeconds: Settings.NearWarpBurnStartMarginSeconds,
+				warpWaitState: LogicState.NearWarpWait,
+				skippedWarpState: LogicState.Countdown
+			);
+		}
+
+		void ImplementState_NearWarpWait()
+		{
+			CommonStateLogic_WarpWait(
+				burnStartMarginSeconds: Settings.NearWarpBurnStartMarginSeconds,
+				restState: LogicState.NearWarpRest
+			);
+		}
+
+		void ImplementState_NearWarpRest()
+		{
+			CommonStateLogic_WarpRest(
+				restSettings: Settings.NearWarpRestSettings,
+				nextState: LogicState.Countdown
+			);
+		}
+
+		void ImplementState_Countdown()
+		{
+			if (KspVars.CurrentThrottle != 0.0)
+			{
+				LogUtility.Log("Throttle already engaged - regarding current setting as max.");
+				NextState = LogicState.ThrottleMax;
+				CommonStateLogic_Throttle();
+			}
+			else if (KspVars.TimeToNextManeuverBurnStartUT <= Settings.ThrottleUpSeconds * squareRootOfOneHalf)
+			{
+				TargetMaxThrottleUT = KspVars.NextManeuverBurnStartUT + (Settings.ThrottleUpSeconds * (1 - squareRootOfOneHalf));
+				LastRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
+				BurnLog.Instance.Reset();
+				KspCommands.SetThrottle(Settings.InitialThrottleSetting);
+				NextState = LogicState.ThrottleUp;
+				CommonStateLogic_Throttle();
+			}
+		}
+
+		const double squareRootOfOneHalf = 0.707106781;
+
+		public double TargetMaxThrottleUT {get; private set;}
+
+		void ImplementState_ThrottleUp()
+		{
+			if (CommonStateLogic_Throttle())
+				return;
+
+			var secondsToMax = TargetMaxThrottleUT - KspVars.CurrentUT;
+
+			if (secondsToMax <= 0)
+			{
+				if (KspVars.CurrentThrottle != 1.0f)
+					KspCommands.SetThrottle(1.0f);
+				NextState = LogicState.ThrottleMax;
+			}
+			else
+			{
+				var marginPortionFulfilled = (Settings.ThrottleUpSeconds - secondsToMax) / Settings.ThrottleUpSeconds;
+				var newThrottle = (float)((1.0f - Settings.InitialThrottleSetting) * marginPortionFulfilled + (double)Settings.InitialThrottleSetting);
+				if (newThrottle > 1.0f)
+					newThrottle = 1.0f;
+				if (newThrottle < 0.0f)
+					newThrottle = 0.0f;
+				KspCommands.SetThrottle(newThrottle, false);
+			}
+		}
+
+		void ImplementState_ThrottleMax()
+		{
+			if (CommonStateLogic_Throttle())
+				return;
+
+			if (StateChanged && KspVars.CurrentThrottle != 1.0f)
+				KspCommands.SetThrottle(1.0f);
+		}
+
+		void ImplementState_ThrottleDown()
+		{
+			CommonStateLogic_Throttle();
+		}
+
+		public double LastRemainingDeltaV {get; private set;}
+
+		/// <summary>
+		/// Checks if we should stop or slow down.  If so, handles the appropriate throttling and state transition, and returns true.
+		/// If we don't need to stop or slow down, returns false.
+		/// </summary>
+		bool CommonStateLogic_Throttle()
+		{
+			// see how much delta V remains
+			var remainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
+
+			// see if we should stop
+			bool remainingDeltaVIncreasing = (remainingDeltaV - LastRemainingDeltaV) > Settings.RemainingDeltaVIncreaseDetectionSafety;
+			LastRemainingDeltaV = remainingDeltaV;
+			bool reachedGoal = remainingDeltaV <= Settings.MaxRemainingDeltaVGoal;
+			bool stop = remainingDeltaVIncreasing || reachedGoal;
+
+			// stop if we must
+			if (stop)
+			{
+				LogUtility.Log($"Stop: ReachedGoal = {reachedGoal}, RemainingDeltaVIncreasing = {remainingDeltaVIncreasing}");
+				LogUtility.Log($"Final Remaining DeltaV: {remainingDeltaV}");
+				KspCommands.SetThrottle(0);
+				NextState = LogicState.ThrottleZero;
+				return true;
+			}
+
+			// otherwise slow down according to lower throttle ramp if within threshold
+			if (BurnLog.Instance.EstimatesValid)
+				for (int i = 0; i < Settings.LowerThrottleRamp.Length; i++)
+					if (BurnLog.Instance.EstimatedBurnTimeRemainingAtCurrentThrottle <= Settings.LowerThrottleRamp[i].secondsRemaining
+							&& KspVars.CurrentThrottle > (Settings.LowerThrottleRamp[i].maxThrottle + Settings.ThrottleCheckSafetyMargin))
+					{
+						KspCommands.SetThrottle(Settings.LowerThrottleRamp[i].maxThrottle);
+						NextState = LogicState.ThrottleDown;
+						return true;
+					}
+
+			return false;
+		}
+
+		void ImplementState_ThrottleZero()
+		{
+			if (KspVars.CurrentThrottle != 0)
+			{
+				KspCommands.SetThrottle(0);
+				ResetCurrentState();
+				return;
+			}
+
+			if (AreStabilizationSettingsAchieved(Settings.ThrottleZeroRestSettings))
+				NextState = LogicState.Done;
+		}
+
+		void ImplementState_Done()
+		{
+			if (StateChanged)
+				KspCommands.DeleteNextManeuverNode();
+			else
+			{
+				if (KspVars.IsManeuverPlanned)
+				{
+					LogUtility.Log("Next maneuver...");
+					NextState = LogicState.FarAim;
+				}
+				else
+				{
+					LogUtility.Log("No further maneuvers planned.");
+					NextState = LogicState.Idle;
+				}
+			}
 		}
 	}
 }

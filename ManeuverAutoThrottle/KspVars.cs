@@ -42,6 +42,17 @@ namespace ManeuverAutoThrottle
 		}}
 
 		/// <summary>
+		/// The time in seconds UT until the next maneuver burn should start.  Will be negative if the time to start
+		/// has already passed.  Will return NaN if no maneuver is planned.
+		/// </summary>
+		public static double TimeToNextManeuverBurnStartUT {get{
+			if (IsManeuverPlanned)
+				return NextManeuverBurnStartUT - CurrentUT;
+			else
+				return double.NaN;
+		}}
+
+		/// <summary>
 		/// Returns the total delta V required to complete the next planned maneuver for the active vessel, if any, in m/s.
 		/// If no maneuver is planned, NaN is returned.
 		/// </summary>
@@ -149,6 +160,14 @@ namespace ManeuverAutoThrottle
 			if (FlightGlobals.ActiveVessel == null || !IsManeuverPlanned)
 				return double.NaN;
 			return Vector3d.Angle(ThrustVector, NextManeuverBurnVector);
+		}}
+
+		/// <summary>
+		/// Returns true if the active vessel can enable maneuver hold autopilot.
+		/// </summary>
+		public static bool CanEnableAutoPilotManeuverHold {get{
+			var autoPilot = FlightGlobals.ActiveVessel?.Autopilot;
+			return autoPilot.CanSetMode(VesselAutopilot.AutopilotMode.Maneuver);
 		}}
 	}
 }

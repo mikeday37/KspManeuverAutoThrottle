@@ -33,17 +33,13 @@ namespace ManeuverAutoThrottle
 
 		public void FixedUpdate()
 		{
-			// log burn variables if we're enabled and burning in order to get required estimates
-			if (MasterSwitch.IsEnabled && KspVars.CurrentThrottle > 0.0f)
-				BurnLog.Instance.RecordAndEstimate();
-			else if (BurnLog.Instance.EstimatesValid) // otherwise if estimates were previously valid, reset the log
-				BurnLog.Instance.Reset();
+			Logic.Instance.OnFixedUpdate();
 		}
 
 		public void LateUpdate()
 		{
 			Logic.Instance.RedrawAction = () => launcher.SetTexture();
-			Logic.Instance.Tick();
+			Logic.Instance.OnLateUpdate();
 		}
 	}
 }
