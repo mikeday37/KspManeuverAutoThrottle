@@ -14,9 +14,9 @@ namespace ManeuverAutoThrottle
 		public const double MaxManeuverOffAnglePreWarp = 1.0;
 		public const double WarpSecondsBeforeBurn = 5.0;
 		public const double MinRemainingDeltaV = 0.02;
-		public const double MinRemainingDeltaVForOffCourseCheck = 1.0;
-		public const float MaxBurnVectorDrift = 5.0f;
 		public const float ThrottleCheckSafetyMargin = 0.002f;
+		public const double RemainingDeltaVIncreaseDetectionSafety = 0.0001;
+		public const double SecondsRemainingStabilityAssistThreshold = 2.0;
 
 		public static readonly (double secondsRemaining, float maxThrottle)[] LowerThrottleRamp = new (double, float)[]{
 			(2.0, 0.8f),

@@ -64,10 +64,27 @@ namespace ManeuverAutoThrottle
 		/// <summary>
 		/// Enables autopilot to head towards the next planned maneuver for the active vessel, if any, otherwise does nothing.
 		/// </summary>
-		public static void EnableAutoPilotToManeuverVector()
+		public static void EnableAutoPilotManeuverHold()
 		{
-			if (KspVars.IsManeuverPlanned)
-				FlightGlobals.ActiveVessel?.Autopilot?.Enable(VesselAutopilot.AutopilotMode.Maneuver);
+			var autoPilot = FlightGlobals.ActiveVessel?.Autopilot;
+			if (autoPilot != null && KspVars.IsManeuverPlanned && autoPilot.Mode != VesselAutopilot.AutopilotMode.Maneuver)
+			{
+				autoPilot.Enable(VesselAutopilot.AutopilotMode.Maneuver);
+				LogUtility.Log("Enabled Maneuver Hold");
+			}
+		}
+
+		/// <summary>
+		/// Switches autopilot to SAS mode.
+		/// </summary>
+		public static void EnableAutoPilotStabilityAssist()
+		{
+			var autoPilot = FlightGlobals.ActiveVessel?.Autopilot;
+			if (autoPilot != null && autoPilot.Mode != VesselAutopilot.AutopilotMode.StabilityAssist)
+			{
+				FlightGlobals.ActiveVessel?.Autopilot?.Enable(VesselAutopilot.AutopilotMode.StabilityAssist);
+				LogUtility.Log("Enabled Stability Assist");
+			}
 		}
 	}
 }

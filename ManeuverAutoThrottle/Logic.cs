@@ -18,6 +18,7 @@ namespace ManeuverAutoThrottle
 			LastActiveVesselPersistentId = 0;
 			AutoPilotSet = false;
 			LastSetThrottle = float.NaN;
+			DisabledManeuverHold = false;
 			MasterSwitch.Disable();
 			State = LogicState.Idle;
 			BurnLog.Instance.Reset();
@@ -39,6 +40,8 @@ namespace ManeuverAutoThrottle
 		public uint LastActiveVesselPersistentId {get; private set;}
 		public bool AutoPilotSet {get; private set;}
 		public float LastSetThrottle {get; private set;}
+		public double LastNextManeuverRemainingDeltaV {get; private set;}
+		public bool DisabledManeuverHold {get; private set;}
 
 		public void Tick()
 		{
@@ -68,7 +71,8 @@ namespace ManeuverAutoThrottle
 			// if not already set, enable autopilot
 			if (!AutoPilotSet)
 			{
-				KspCommands.EnableAutoPilotToManeuverVector();
+				KspCommands.EnableAutoPilotManeuverHold();
+				DisabledManeuverHold = false;
 				AutoPilotSet = true;
 			}
 
@@ -104,6 +108,9 @@ namespace ManeuverAutoThrottle
 				// save the burn vector
 				OriginalBurnVector = KspVars.NextManeuverBurnVector;
 
+				// save the deltaV remaining
+				LastNextManeuverRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
+
 				// set throttle to max if not already set
 				if (KspVars.CurrentThrottle == 0.0f)
 					KspCommands.SetThrottle(1.0f);
@@ -112,26 +119,32 @@ namespace ManeuverAutoThrottle
 				State = LogicState.Burning;
 			}
 
-			// if now burning, handle lowwering throttle
+			// if now burning, handle end of burn
 			if (State == LogicState.Burning)
 			{
+				// if the seconds remain are below the threshold, switch to SAS rather than maneuver hold
+				// (because the maneuver vector gets really inaccurate close to the end of the burn)
+				if (BurnLog.Instance.EstimatesValid && AutoPilotSet && !DisabledManeuverHold
+					  && BurnLog.Instance.EstimatedBurnTimeRemainingAtCurrentThrottle <= Settings.SecondsRemainingStabilityAssistThreshold)
+				{
+					KspCommands.EnableAutoPilotStabilityAssist();
+					DisabledManeuverHold = true;
+				}
+
 				// stop the burn if either the remaining delta V is below the setting,
 				// or the burn vector has diverged too far from the original (which would mean we probably overshot the maneuver)
-				bool stopDone = KspVars.NextManeuverRemainingDeltaV <= Settings.MinRemainingDeltaV;
-				bool stopOffCourse = 
-					KspVars.NextManeuverRemainingDeltaV > Settings.MinRemainingDeltaVForOffCourseCheck
-					&& Vector3d.Angle(OriginalBurnVector, KspVars.NextManeuverBurnVector) >= Settings.MaxBurnVectorDrift;
-				if (stopDone || stopOffCourse)
+				bool stopRemainingDeltaVIncreasing = (KspVars.NextManeuverRemainingDeltaV - LastNextManeuverRemainingDeltaV) > Settings.RemainingDeltaVIncreaseDetectionSafety;
+				LastNextManeuverRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
+				bool stopReachedGoal = KspVars.NextManeuverRemainingDeltaV <= Settings.MinRemainingDeltaV;
+				bool stop = stopRemainingDeltaVIncreasing || stopReachedGoal;
+				if (stop)
 				{
-					// in either condition, kill throttle
-					KspCommands.SetThrottle(0.0f);
+					// log some useful info
+					LogUtility.Log($"Stop: ReachedGoal = {stopReachedGoal}, DeltaVIncreasing = {stopRemainingDeltaVIncreasing}");
+					LogUtility.Log($"Final Remaining DeltaV: {KspVars.NextManeuverRemainingDeltaV}");
 
-					// if off course but not done, reset
-					if (stopOffCourse && !stopDone)
-					{
-						Reset();
-						return;
-					}
+					// kill throttle
+					KspCommands.SetThrottle(0.0f);
 
 					// otherwise, delete the maneuver we just completed
 					KspCommands.DeleteNextManeuverNode();
