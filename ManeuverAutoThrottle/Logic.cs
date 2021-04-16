@@ -135,7 +135,7 @@ namespace ManeuverAutoThrottle
 				// or the burn vector has diverged too far from the original (which would mean we probably overshot the maneuver)
 				bool stopRemainingDeltaVIncreasing = (KspVars.NextManeuverRemainingDeltaV - LastNextManeuverRemainingDeltaV) > Settings.RemainingDeltaVIncreaseDetectionSafety;
 				LastNextManeuverRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
-				bool stopReachedGoal = KspVars.NextManeuverRemainingDeltaV <= Settings.MinRemainingDeltaV;
+				bool stopReachedGoal = KspVars.NextManeuverRemainingDeltaV <= Settings.MaxRemainingDeltaVGoal;
 				bool stop = stopRemainingDeltaVIncreasing || stopReachedGoal;
 				if (stop)
 				{
