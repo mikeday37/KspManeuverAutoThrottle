@@ -17,6 +17,8 @@ If your vessel supports Maneuver Hold, you're in for a treat, as it will also en
 4. Automatically deletes the maneuver node when the burn is finished.
 5. Proceeds automatically to the next maneuver node and repeats the whole process until no maneuver nodes remain.
 
+All the above is accomplished with existing KSP features - the plugin doesn't engage any controls, nor modify any game variables, that a human player (or kerbal) could not.
+
 Enjoy!
 
 ## Installation
@@ -38,4 +40,8 @@ WARNING: This is a work in progress.  I intend a lot more testing before conside
 
 1. Currently requires the NavBall to be enabled (not minimized) in order to detect the burn start time.  I expect a way to work around this soon.
 
-2. When in very low orbits around small bodies, the aim for the burn is sometimes less accurate.  This is due to the fact that the maneuver vector sometimes appears to wander during warp in very low orbits.  Still, it usually ends up with a final burn within 0.1 m/s of the intended Delta V.
+2. When in very low orbits around small bodies, the aim for the burn is sometimes less accurate.  This is due to the fact that the maneuver vector sometimes appears to wander during warp in very low orbits.
+
+## Accuracy
+
+The plugin aims to complete burns within 0.001 m/s of the planned Delta V, and often achieves that goal when Maneuver Hold is available.  Even in lower orbits where the maneuver vector drifts during warp, it often achieves an error of less than 0.1 m/s.  In rare cases (without Maneuver Hold), I've seen an error of about 0.3 m/s (and still often less) with manual piloting.
