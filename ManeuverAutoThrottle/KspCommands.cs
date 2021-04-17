@@ -45,7 +45,7 @@ namespace ManeuverAutoThrottle
 			}
 		}
 
-		public static double? LastSetThottleLogUT {get; private set;}
+		public static double? LastSetThrottleLogUT {get; private set;}
 
 		/// <summary>
 		/// Deletes the next planned maneuver node for the active vessel, if any, otherwise does nothing.
