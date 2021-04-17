@@ -169,5 +169,76 @@ namespace ManeuverAutoThrottle
 			var autoPilot = FlightGlobals.ActiveVessel?.Autopilot;
 			return autoPilot.CanSetMode(VesselAutopilot.AutopilotMode.Maneuver);
 		}}
+
+		/// <summary>
+		/// Returns true only if we can determine that the active vessel's current stage cannot cause thrust at max throttle.
+		/// </summary>
+		public static bool IsCurrentStageExhausted {get{
+			var vessel = FlightGlobals.ActiveVessel;
+			if (vessel == null)
+				return false;
+			int stage = vessel.currentStage;
+			var dvInfo = vessel.VesselDeltaV;
+			if (dvInfo == null || !dvInfo.IsReady)
+				return false;
+			var stageInfo = dvInfo.GetStage(stage);
+			if (stageInfo == null)
+				return false;
+			var engines = stageInfo.enginesActiveInStage;
+			if (engines == null)
+				return false;
+			if (engines.Count <= 0)
+				return true;
+			for (int i = 0; i < engines.Count; i++) // purposefully avoiding linq for memory efficiency
+			{
+				var engine = engines[i];
+				if (engine == null)
+					return false;
+				if (engine.GetFuelTimeMaxThrottle(stage) > 0.0)
+					return false;
+			}
+			return true;
+		}}
+
+		/// <summary>
+		/// If possible, returns the current acceleration provided by the active vessel's active engines at current throttle.
+		/// If not possible to determine this, returns NaN.
+		/// </summary>
+		public static double CurrentAcceleration {get{
+			if (CurrentThrottle <= 0.0 || IsCurrentStageExhausted)
+				return double.NaN;
+			var vessel = FlightGlobals.ActiveVessel;
+			if (vessel == null)
+				return double.NaN;
+			int stage = vessel.currentStage;
+			var dvInfo = vessel.VesselDeltaV;
+			if (dvInfo == null || !dvInfo.IsReady)
+				return double.NaN;
+			var stageInfo = dvInfo.GetStage(stage);
+			if (stageInfo == null)
+				return double.NaN;
+
+			var mass = vessel.totalMass;
+			var thrust = stageInfo.thrustActual;
+			var accel = ((double)thrust) / mass;
+
+			return accel;
+		}}
+
+		/// <summary>
+		/// If possible, returns the number of seconds the active vessel's currently active engines will need to remain
+		/// engaged at current throttle in order to complete the burn for the next maneuver, assuming aiming toward
+		/// the maneuver burn vector.
+		/// 
+		/// If not possible, returns NaN.
+		/// </summary>
+		public static double EstimatedNextManeuverBurnTimeRemainingAtCurrentThrottle {get{
+			var accel = CurrentAcceleration;
+			var dv = NextManeuverRemainingDeltaV;
+			if (double.IsNaN(accel) || double.IsNaN(dv))
+				return double.NaN;
+			else
+				return dv / accel;
+		}}
 	}
 }

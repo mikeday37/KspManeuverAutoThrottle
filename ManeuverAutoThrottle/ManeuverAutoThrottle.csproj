@@ -59,7 +59,6 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BurnLog.cs" />
     <Compile Include="KspCommands.cs" />
     <Compile Include="KspVars.cs" />
     <Compile Include="LogUtility.cs" />

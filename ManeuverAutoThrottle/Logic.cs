@@ -26,7 +26,6 @@ namespace ManeuverAutoThrottle
 		public void Reset()
 		{
 			bool redrawRequired = MasterSwitch.IsEnabled;
-			BurnLog.Instance.Reset();
 			LastActiveVesselPersistentId = null;
 			ResetLogic();
 			MasterSwitch.Disable();
@@ -60,6 +59,8 @@ namespace ManeuverAutoThrottle
 			ThrottleZero = 6040,
 
 			Done = 7010,
+
+			Staging = 100010,
 		}
 
 		public LogicState CurrentState {get; private set;}
@@ -76,7 +77,7 @@ namespace ManeuverAutoThrottle
 		public bool FullAutoPilot {get; private set;}
 
 		/// <summary>
-		/// Resets the logic state machine (but not the burn log) without affecting UI.
+		/// Resets the logic state machine without affecting UI.
 		/// </summary>
 		void ResetLogic()
 		{
@@ -104,12 +105,6 @@ namespace ManeuverAutoThrottle
 		{
 			// increaes fixed update count
 			FixedUpdateCountInState++;
-
-			// log burn variables if we're enabled and burning in order to get required estimates
-			if (MasterSwitch.IsEnabled && KspVars.CurrentThrottle > 0.0f)
-				BurnLog.Instance.RecordAndEstimate();
-			else if (BurnLog.Instance.EstimatesValid) // otherwise if estimates were previously valid, reset the log
-				BurnLog.Instance.Reset();
 		}
 
 		/// <summary>
@@ -204,6 +199,8 @@ namespace ManeuverAutoThrottle
 				case LogicState.ThrottleZero: ImplementState_ThrottleZero(); break;
 
 				case LogicState.Done: ImplementState_Done(); break;
+
+				case LogicState.Staging: ImplementState_Staging(); break;
 			}
 		}
 
@@ -403,7 +400,6 @@ namespace ManeuverAutoThrottle
 			{
 				TargetMaxThrottleUT = KspVars.NextManeuverBurnStartUT + (Settings.ThrottleUpSeconds * (1 - squareRootOfOneHalf));
 				LastRemainingDeltaV = KspVars.NextManeuverRemainingDeltaV;
-				BurnLog.Instance.Reset();
 				KspCommands.SetThrottle(Settings.InitialThrottleSetting);
 				NextState = LogicState.ThrottleUp;
 				CommonStateLogic_Throttle();
@@ -456,8 +452,8 @@ namespace ManeuverAutoThrottle
 		public double LastRemainingDeltaV {get; private set;}
 
 		/// <summary>
-		/// Checks if we should stop or slow down.  If so, handles the appropriate throttling and state transition, and returns true.
-		/// If we don't need to stop or slow down, returns false.
+		/// Checks if we should stop, slow down, or allow for staging.  If so, handles the appropriate throttling and state transition, and returns true.
+		/// If we don't need to do any of that currently, returns false.
 		/// </summary>
 		bool CommonStateLogic_Throttle()
 		{
@@ -480,16 +476,30 @@ namespace ManeuverAutoThrottle
 				return true;
 			}
 
+			// see if we should wait for staging
+			if (KspVars.IsCurrentStageExhausted)
+			{
+				LogUtility.Log($"Stage fuel exhausted - manually stage to continue.");
+				StateAfterStaging = CurrentState;
+				NextState = LogicState.Staging;
+				return true;
+			}
+
+
 			// otherwise slow down according to lower throttle ramp if within threshold
-			if (BurnLog.Instance.EstimatesValid)
+			var burnTimeRemainingAtCurrentThrottle = KspVars.EstimatedNextManeuverBurnTimeRemainingAtCurrentThrottle;
+			if (!double.IsNaN(burnTimeRemainingAtCurrentThrottle))
+			{
 				for (int i = 0; i < Settings.LowerThrottleRamp.Length; i++)
-					if (BurnLog.Instance.EstimatedBurnTimeRemainingAtCurrentThrottle <= Settings.LowerThrottleRamp[i].secondsRemaining
+					if (burnTimeRemainingAtCurrentThrottle <= Settings.LowerThrottleRamp[i].secondsRemaining
 							&& KspVars.CurrentThrottle > (Settings.LowerThrottleRamp[i].maxThrottle + Settings.ThrottleCheckSafetyMargin))
 					{
+						LogUtility.LogBurnEstimates();
 						KspCommands.SetThrottle(Settings.LowerThrottleRamp[i].maxThrottle);
 						NextState = LogicState.ThrottleDown;
 						return true;
 					}
+			}
 
 			return false;
 		}
@@ -532,6 +542,14 @@ namespace ManeuverAutoThrottle
 					}
 				}
 			}
+		}
+
+		public LogicState StateAfterStaging {get; private set;}
+
+		void ImplementState_Staging()
+		{
+			if (KspVars.CurrentThrottle > 0.0 && !KspVars.IsCurrentStageExhausted)
+				NextState = StateAfterStaging;
 		}
 	}
 }
