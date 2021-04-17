@@ -1,24 +1,23 @@
 # KspManeuverAutoThrottle
-A small plugin for Kerbal Space Program to optionally set max thrust at maneuver start, and gradually lower throttle toward the end for an accurate burn.
+A small plugin for Kerbal Space Program to automate the timing of maneuver burns.  Will quickly ramp up throttle at the proper time, then lower it toward the end of the burn for greater accuracy (much like I do manually).  Will also engage the KSP default "Warp to Next Maneuver" behavior before each burn.  Does not do any automatic staging nor maneuver editing.
 
-WARNING: This is a work in progress.  Edge conditions still need to be resolved.  Current logic will result in inaccurate burns in some cases.
+This plugin is very lightweight and easy on memory.  It performs no allocations on the heap during any Update events, so it should not suffer from the stuttering/freezing problems encountered when using larger plugins that enable similar and more extensive functionality.
 
-UI is very simple - just a toggle button added to the application bar.  Plugin does nothing if the button is not enabled/checked.
+The UI is very simple - just a toggle button added to the application bar.  Plugin does nothing if the button is not enabled/checked.
 
-When enabled, the following occurs:
+You can uncheck the button at any time to disable this plugin's logic, but then you'll have to shut off throttle (if engaged) yourself.  This allows you to freely turn the auto throttle logic on and off when you want it, so you can still fine tune manually whenever you want.  You must always stage manually, but can leave the button enabled while you do so - it will pick up where it left off as soon as engines are activated with available fuel.
 
-1. If your craft supports it, will automatically enable "Hold Maneuver" autopilot mode.  If not, it will NOT help you aim toward the maneuver burn vector.  You'll have to do that yourself.
-2. Once your craft is aiming within 1 degree of the maneuver indicator, if the maneuver start time is far in the future, it will time warp to just 5 seconds before the burn, so you don't have to wait as long or fine-tune the time warp.
-3. At the proper time, it will set max throttle.
-4. When there's only 2 seconds of burn left to complete the maneuver, it will automatically start progressively lowering the throttle to attempt a more accurate stop time.
-5. When the burn has accomplished the intended DeltaV change within 0.02 m/s, it will shut off throttle and delete the maneuver node.
-6. If there are any further maneuver nodes, the process repeats.  Otherwise, the plugin disables itself until you check the button again.
+My goal was only to make it about as accurate as my own manual efforts, but just as reliable.  I got tired of repeatedly staring intently at the same tiny bits of UI for the most critical timing in the game, so I decided to automate it.   :-)  In the pursuit of making it reliable, it ended up becoming quite accurate in most cases and slightly more full-featured.
 
-During step 5, there is also a failsafe abort:  If the realtime burn vector drifts 5 or more degrees from the original burn vector, it shuts throttle, does not delete the maneuver node, and disables the plugin.  This is to prevent continuing a flight plan if a burn is inaccurate.  In practice, I've only see this occur during development while tweaking the settings, but the failsafe remains just in case.
+If your vessel supports Maneuver Hold, you're in for a treat, as it will also enable Auto Pilot, which gives the following enhancements:
 
-You can uncheck the button at any time to disable the above sequence, but then you'll have to shut off throttle (if engaged) yourself.  This allows you to freely turn the auto throttle logic on and off when you want it, so you can still fine tune manually whenever you want.
+1. Automatically enables Maneuver Hold before each burn.
+2. Waits until the orientation of your vessel is highly accurate for the burn before warping.
+3. Repeats aim-stabilization and another warp to decrease the amount of time you have to wait before each burn (KSP's default is about 60 seconds).
+4. Automatically deletes the maneuver node when the burn is finished.
+5. Proceeds automatically to the next maneuver node and repeats the whole process until no maneuver nodes remain.
 
-This mod is very lightweight and easy on memory.  The mod performs no allocations on the heap during any Update events, so this mod should not suffer from the stuttering/freezing problems encountered when using larger mods that enable this type of functionality.
+Enjoy!
 
 ## Installation
 
@@ -35,12 +34,8 @@ C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program\GameData\LuxS
 
 ## Known Issues
 
-1. Requires the NavBall to be enabled (not minimized) in order to detect the burn start time.  I haven't found a way to reliably get this data that doesn't depend on the NavBall, even though the property I'm using does not seem related to the NavBall at all (ManeuverNode.startBurnIn).
+WARNING: This is a work in progress.  I intend a lot more testing before considering it ready for release.
 
-2. Rarely, it will not successfully warp to the next maneuver node after completing the prior.  If this happens, just toggle the button to reset the logic, and it should be fine.
+1. Currently requires the NavBall to be enabled (not minimized) in order to detect the burn start time.  I expect a way to work around this soon.
 
-3. Vessels with very high or very low acceleration are currently not well handled during slowdown.  Use at your own risk!
-
-The results are NOT as accurate as MechJeb's automatic maneuvering, but they're good enough for very satisfactory results most of the time when piloting ships in the middle range of max acceleration.  My goal was only to make it about as accurate as my own manual efforts.  I got tired of repeatedly staring intently at the same tiny bits of UI for the most critical timing in the game, and decided to automate it.   :-)
-
-Enjoy!
+2. When in very low orbits around small bodies, the aim for the burn is sometimes less accurate.  This is due to the fact that the maneuver vector sometimes appears to wander during warp in very low orbits.  Still, it usually ends up with a final burn within 0.1 m/s of the intended Delta V.
