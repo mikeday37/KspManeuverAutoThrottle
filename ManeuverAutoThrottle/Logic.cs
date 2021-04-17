@@ -73,12 +73,15 @@ namespace ManeuverAutoThrottle
 
 		public uint? LastActiveVesselPersistentId {get; private set;}
 
+		public bool FullAutoPilot {get; private set;}
+
 		/// <summary>
 		/// Resets the logic state machine (but not the burn log) without affecting UI.
 		/// </summary>
 		void ResetLogic()
 		{
 			CurrentState = LogicState.Idle;
+			FullAutoPilot = false;
 			ResetCurrentState();
 		}
 
@@ -204,12 +207,31 @@ namespace ManeuverAutoThrottle
 			}
 		}
 
+		void CommonStateLogic_SetNextStateToStart(bool verbose = true)
+		{
+			if (KspVars.CanEnableAutoPilotManeuverHold)
+			{
+				if (verbose)
+					LogUtility.Log("Maneuver Hold capability detected - enabling full autopilot.");
+				FullAutoPilot = true;
+				NextState = LogicState.FarAim;
+			}
+			else
+			{
+				if (verbose)
+					LogUtility.Log("Maneuver Hold capability NOT detected - proceeding without autopilot.");
+				FullAutoPilot = false;
+				NextState = LogicState.FarWarpStart;
+			}
+		}
+
 		void ImplementState_Idle()
 		{
 			if (MasterSwitch.IsEnabled && KspVars.IsManeuverPlanned)
 			{
 				LogUtility.Log("ManeuverAutoThrottle Engaged...");
-				NextState = LogicState.FarAim;
+
+				CommonStateLogic_SetNextStateToStart();
 			}
 		}
 
@@ -310,7 +332,7 @@ namespace ManeuverAutoThrottle
 			CommonStateLogic_WarpStart(
 				burnStartMarginSeconds: Settings.FarWarpBurnStartMarginSeconds,
 				warpWaitState: LogicState.FarWarpWait,
-				skippedWarpState: LogicState.NearAim
+				skippedWarpState: FullAutoPilot ? LogicState.NearAim : LogicState.Countdown
 			);
 		}
 
@@ -326,7 +348,7 @@ namespace ManeuverAutoThrottle
 		{
 			CommonStateLogic_WarpRest(
 				restSettings: Settings.FarWarpRestSettings,
-				nextState: LogicState.NearAim
+				nextState: FullAutoPilot ? LogicState.NearAim : LogicState.Countdown
 			);
 		}
 
@@ -487,19 +509,27 @@ namespace ManeuverAutoThrottle
 
 		void ImplementState_Done()
 		{
-			if (StateChanged)
+			if (StateChanged && FullAutoPilot)
 				KspCommands.DeleteNextManeuverNode();
 			else
 			{
-				if (KspVars.IsManeuverPlanned)
+				if (!FullAutoPilot)
 				{
-					LogUtility.Log("Next maneuver...");
-					NextState = LogicState.FarAim;
+					LogUtility.Log("Disengaging auto-throttle for manual resolution.");
+					NextState = LogicState.Idle;
 				}
 				else
 				{
-					LogUtility.Log("No further maneuvers planned.");
-					NextState = LogicState.Idle;
+					if (KspVars.IsManeuverPlanned)
+					{
+						LogUtility.Log("Next maneuver...");
+						CommonStateLogic_SetNextStateToStart(false);
+					}
+					else
+					{
+						LogUtility.Log("No further maneuvers planned.");
+						NextState = LogicState.Idle;
+					}
 				}
 			}
 		}
