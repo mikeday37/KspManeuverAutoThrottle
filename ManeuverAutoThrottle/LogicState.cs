@@ -37,5 +37,7 @@ namespace ManeuverAutoThrottle
 		Done = 7010,
 
 		Staging = 100010,
+
+		NextManeuver = 200010,
 	}
 }

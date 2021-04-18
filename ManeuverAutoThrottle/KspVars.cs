@@ -174,16 +174,10 @@ namespace ManeuverAutoThrottle
 		/// Returns true only if we can determine that the active vessel's current stage cannot cause thrust at max throttle.
 		/// </summary>
 		public static bool IsCurrentStageExhausted {get{
-			var vessel = FlightGlobals.ActiveVessel;
-			if (vessel == null)
-				return false;
-			int stage = vessel.currentStage;
-			var dvInfo = vessel.VesselDeltaV;
-			if (dvInfo == null || !dvInfo.IsReady)
-				return false;
-			var stageInfo = dvInfo.GetStage(stage);
+			var stageInfo = CurrentEffectiveStageInfo;
 			if (stageInfo == null)
 				return false;
+			int stage = stageInfo.stage;
 			var engines = stageInfo.enginesActiveInStage;
 			if (engines == null)
 				return false;
@@ -201,20 +195,44 @@ namespace ManeuverAutoThrottle
 		}}
 
 		/// <summary>
+		/// Gets the current "effective" stage, which is the highest numbered stage that is not-null.
+		/// This is necessary to overcome some strange behavior of the KSP API.
+		/// 
+		/// Returns null if there's no active vessel or can't get the stage.
+		/// </summary>
+		public static DeltaVStageInfo CurrentEffectiveStageInfo {get{
+			var vessel = FlightGlobals.ActiveVessel;
+			if (vessel == null)
+				return null;
+			var dvInfo = vessel.VesselDeltaV;
+			if (dvInfo == null || !dvInfo.IsReady)
+				return null;
+
+			var stage = vessel.currentStage;
+			DeltaVStageInfo stageInfo;
+			for (stageInfo = dvInfo.GetStage(stage); stageInfo == null; stage--)
+			{
+				if (stage < 0)
+					return null;
+				stageInfo = dvInfo.GetStage(stage);
+			}
+
+			return stageInfo;
+		}}
+
+		/// <summary>
 		/// If possible, returns the current acceleration provided by the active vessel's active engines at current throttle.
 		/// If not possible to determine this, returns NaN.
 		/// </summary>
 		public static double CurrentAcceleration {get{
 			if (CurrentThrottle <= 0.0 || IsCurrentStageExhausted)
 				return double.NaN;
+
 			var vessel = FlightGlobals.ActiveVessel;
 			if (vessel == null)
 				return double.NaN;
-			int stage = vessel.currentStage;
-			var dvInfo = vessel.VesselDeltaV;
-			if (dvInfo == null || !dvInfo.IsReady)
-				return double.NaN;
-			var stageInfo = dvInfo.GetStage(stage);
+			
+			var stageInfo = CurrentEffectiveStageInfo;
 			if (stageInfo == null)
 				return double.NaN;
 

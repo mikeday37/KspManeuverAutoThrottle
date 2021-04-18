@@ -57,6 +57,12 @@ namespace ManeuverAutoThrottle
 			(0.2, 0.01f),
 			(0.1, 0.005f),
 		};
+
+		public readonly static StabilizationSettings NextManeuverRestSettings = new StabilizationSettings(
+			minFixedUpdates: 5,
+			minLateUpdates: 5,
+			minUTPassed: 0.2
+		);
 	}
 
 	public class StabilizationSettings

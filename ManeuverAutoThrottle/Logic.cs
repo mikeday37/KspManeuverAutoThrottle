@@ -171,6 +171,8 @@ namespace ManeuverAutoThrottle
 				case LogicState.Done: ImplementState_Done(); break;
 
 				case LogicState.Staging: ImplementState_Staging(); break;
+
+				case LogicState.NextManeuver: ImplementState_NextManeuver(); break;
 			}
 		}
 
@@ -532,28 +534,25 @@ namespace ManeuverAutoThrottle
 
 		void ImplementState_Done()
 		{
-			if (StateChanged && FullAutoPilot)
-				KspCommands.DeleteNextManeuverNode();
-			else
+			if (FullAutoPilot && MasterSwitch.IsRepeatEnabled)
 			{
-				if (!(FullAutoPilot && MasterSwitch.IsRepeatEnabled))
+				KspCommands.DeleteNextManeuverNode();
+
+				if (KspVars.IsManeuverPlanned)
 				{
-					LogUtility.Log("Disengaging auto-throttle for manual resolution.");
-					NextState = LogicState.Idle;
+					LogUtility.Log("Next maneuver...");
+					NextState = LogicState.NextManeuver;
 				}
 				else
 				{
-					if (KspVars.IsManeuverPlanned)
-					{
-						LogUtility.Log("Next maneuver...");
-						CommonStateLogic_SetNextStateToStart(false);
-					}
-					else
-					{
-						LogUtility.Log("No further maneuvers planned.");
-						NextState = LogicState.Idle;
-					}
+					LogUtility.Log("No further maneuvers planned.");
+					NextState = LogicState.Idle;
 				}
+			}
+			else
+			{
+				LogUtility.Log("Disengaging auto-throttle for manual resolution.");
+				NextState = LogicState.Idle;
 			}
 		}
 
@@ -563,6 +562,12 @@ namespace ManeuverAutoThrottle
 		{
 			if (KspVars.CurrentThrottle > 0.0 && !KspVars.IsCurrentStageExhausted)
 				NextState = StateAfterStaging;
+		}
+
+		void ImplementState_NextManeuver()
+		{
+			if (AreStabilizationSettingsAchieved(Settings.NextManeuverRestSettings))
+				CommonStateLogic_SetNextStateToStart(false);
 		}
 	}
 }
