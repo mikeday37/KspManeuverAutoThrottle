@@ -20,7 +20,7 @@ namespace ManeuverAutoThrottle
 		}
 
 		ApplicationLauncherButton button = null;
-		static Texture2D offTexture, onTexture;
+		static Texture2D offTexture, onTexture, onRepeatTexture;
 
 		const string texturePathPrefix = @"LuxSublima/ManeuverAutoThrottle/Resources/";
 
@@ -28,6 +28,7 @@ namespace ManeuverAutoThrottle
 		{
 			offTexture = GameDatabase.Instance.GetTexture(texturePathPrefix + "LauncherOff", false);
 			onTexture = GameDatabase.Instance.GetTexture(texturePathPrefix + "LauncherOn", false);
+			onRepeatTexture = GameDatabase.Instance.GetTexture(texturePathPrefix + "LauncherOnRepeat", false);
 
 			GameEvents.onGUIApplicationLauncherReady.Add(Add);
 			GameEvents.onGUIApplicationLauncherDestroyed.Add(Destroy);
@@ -40,6 +41,7 @@ namespace ManeuverAutoThrottle
 			{
 				button = ApplicationLauncher.Instance.AddModApplication(OnClick, OnClick, null, null, null, null,
 					ApplicationLauncher.AppScenes.FLIGHT | ApplicationLauncher.AppScenes.MAPVIEW, offTexture);
+				button.onRightClick += OnRightClick;
 				SetTexture();
 			}
 		}
@@ -57,8 +59,18 @@ namespace ManeuverAutoThrottle
 			GameEvents.onGUIApplicationLauncherUnreadifying.Remove(Destroy);
 			if (button != null)
 			{
+				button.onRightClick -= OnRightClick;
 				ApplicationLauncher.Instance.RemoveModApplication(button);
 				button = null;
+			}
+		}
+
+		void OnRightClick()
+		{
+			if (button != null)
+			{
+				MasterSwitch.ToggleRepeat();
+				SetTexture();
 			}
 		}
 
@@ -78,7 +90,7 @@ namespace ManeuverAutoThrottle
 				if (MasterSwitch.IsEnabled)
 				{
 					button.SetTrue(false);
-					button.SetTexture(onTexture);
+					button.SetTexture(MasterSwitch.IsRepeatEnabled ? onRepeatTexture : onTexture);
 				}
 				else
 				{

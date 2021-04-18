@@ -72,6 +72,9 @@
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>
+    <Content Include="Resources\LauncherOnRepeat.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Resources\LauncherOn.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

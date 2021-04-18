@@ -536,7 +536,7 @@ namespace ManeuverAutoThrottle
 				KspCommands.DeleteNextManeuverNode();
 			else
 			{
-				if (!FullAutoPilot)
+				if (!(FullAutoPilot && MasterSwitch.IsRepeatEnabled))
 				{
 					LogUtility.Log("Disengaging auto-throttle for manual resolution.");
 					NextState = LogicState.Idle;

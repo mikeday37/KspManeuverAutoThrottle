@@ -14,8 +14,12 @@ namespace ManeuverAutoThrottle
 	{
 		static readonly object myLock = new object();
 		static bool _enabled = false;
-		public static bool IsEnabled { get { lock (myLock) return _enabled; } }
-		public static void Toggle() { lock (myLock) _enabled = !_enabled; }
-		public static void Disable() { lock (myLock) _enabled = false; }
+		public static bool IsEnabled {get{ lock (myLock) return _enabled;}}
+		public static void Toggle() {lock (myLock) _enabled = !_enabled;}
+		public static void Disable() {lock (myLock) _enabled = false;}
+
+		static bool _repeat = false;
+		public static void ToggleRepeat() {lock (myLock) _repeat = !_repeat;}
+		public static bool IsRepeatEnabled {get{lock (myLock) return _repeat;}}
 	}
 }
