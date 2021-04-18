@@ -33,36 +33,6 @@ namespace ManeuverAutoThrottle
 				RedrawAction?.Invoke();
 		}
 
-		public enum LogicState
-		{
-			Idle = 0,
-
-			FarAim = 1010,
-			FarAimStabilize = 1020,
-
-			FarWarpStart = 2010,
-			FarWarpWait = 2020,
-			FarWarpRest = 2030,
-
-			NearAim = 3010,
-			NearAimStabilize = 3020,
-
-			NearWarpStart = 4010,
-			NearWarpWait = 4020,
-			NearWarpRest = 4030,
-			
-			Countdown = 5010,
-
-			ThrottleUp = 6010,
-			ThrottleMax = 6020,
-			ThrottleDown = 6030,
-			ThrottleZero = 6040,
-
-			Done = 7010,
-
-			Staging = 100010,
-		}
-
 		public LogicState CurrentState {get; private set;}
 		public LogicState? NextState {get; private set;}
 		public bool StateChanged {get; private set;}
@@ -220,6 +190,40 @@ namespace ManeuverAutoThrottle
 				FullAutoPilot = false;
 				NextState = LogicState.FarWarpStart;
 			}
+
+			CommonStateLogic_SkipAhead();
+		}
+
+		/// <summary>
+		/// If the time remaining until burn is too low to support the current or next (if set) state,
+		/// this method sets next state to the appropriate state.
+		/// </summary>
+		void CommonStateLogic_SkipAhead()
+		{
+			// to minimize delay in handling appropriate skip ahead, we work on NextState if set, otherwise CurrentState
+			LogicState relevantState = NextState ?? CurrentState;
+
+			// this method is only relevant if between states FarAim (inclusive) and Countdown (exclusive)
+			bool relevant = relevantState >= LogicState.FarAim && relevantState < LogicState.Countdown;
+			if (!relevant)
+				return;
+
+			// cache time left to start
+			var timeLeft = KspVars.TimeToNextManeuverBurnStartUT;
+
+			// handle skipping ahead to countdown
+			if (relevantState < LogicState.Countdown && timeLeft <= Settings.NearWarpBurnStartMarginSeconds)
+			{
+				LogUtility.Log("Skipping ahead to Countdown...");
+				NextState = LogicState.Countdown;
+			}
+			else
+				// otherwise, if autopiloting (so near aim state is relevant), handle skipping far warp
+				if (FullAutoPilot && relevantState < LogicState.NearAim && timeLeft <= Settings.FarWarpBurnStartMarginSeconds)
+				{
+					LogUtility.Log("Skipping ahead to NearAim...");
+					NextState = LogicState.NearAim;
+				}
 		}
 
 		void ImplementState_Idle()
@@ -240,21 +244,29 @@ namespace ManeuverAutoThrottle
 				&& StateAgeUT >= stabilizationSettings.MinUTPassed;
 		}
 
+		public double MaxAimErrorAngle {get{return FullAutoPilot
+			? Settings.MaxAimErrorAngleWithAutoPilot
+			: Settings.MaxAimErrorAngleWithoutAutoPilot;}}
+
 		void CommonStateLogic_Aim(LogicState aimStabilizationState)
 		{
 			if (StateChanged && Settings.EnableManeuverHold)
 				KspCommands.EnableAutoPilotManeuverHold();
 
-			if (KspVars.NextManeuverOffAngle <= Settings.MaxAimErrorAngle)
+			if (KspVars.NextManeuverOffAngle <= MaxAimErrorAngle)
 				NextState = aimStabilizationState;
+
+			CommonStateLogic_SkipAhead();
 		}
 
 		void CommonStateLogic_AimStabilize(LogicState postAimState)
 		{
-			if (KspVars.NextManeuverOffAngle > Settings.MaxAimErrorAngle)
+			if (KspVars.NextManeuverOffAngle > MaxAimErrorAngle)
 				ResetCurrentState();
 			else if (AreStabilizationSettingsAchieved(Settings.AimStabilization))
 				NextState = postAimState;
+
+			CommonStateLogic_SkipAhead();
 		}
 
 		public ulong? LastWarpRetryLateUpdateCount {get; private set;}
@@ -277,6 +289,7 @@ namespace ManeuverAutoThrottle
 			// skip warp entirely if we're already within the burn start margin
 			if (timeTilStart <= burnStartMarginSeconds)
 			{
+				LogUtility.Log($"Skipping ahead to {skippedWarpState}...");
 				NextState = skippedWarpState;
 			}
 			else

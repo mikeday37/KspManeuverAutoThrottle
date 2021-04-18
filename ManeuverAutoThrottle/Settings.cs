@@ -12,7 +12,8 @@ namespace ManeuverAutoThrottle
 	public class Settings
 	{
 		public const bool EnableManeuverHold = true;
-		public const double MaxAimErrorAngle = 0.01;
+		public const double MaxAimErrorAngleWithAutoPilot = 0.01;
+		public const double MaxAimErrorAngleWithoutAutoPilot = 2.0;
 		public readonly static StabilizationSettings AimStabilization = new StabilizationSettings(
 			minFixedUpdates: 5,
 			minLateUpdates: 5,

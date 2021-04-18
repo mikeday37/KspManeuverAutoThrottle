@@ -61,6 +61,7 @@
   <ItemGroup>
     <Compile Include="KspCommands.cs" />
     <Compile Include="KspVars.cs" />
+    <Compile Include="LogicState.cs" />
     <Compile Include="LogUtility.cs" />
     <Compile Include="Logic.cs" />
     <Compile Include="MasterSwitch.cs" />
