@@ -12,14 +12,11 @@ namespace ManeuverAutoThrottle
 	/// </summary>
 	public static class MasterSwitch
 	{
-		static readonly object myLock = new object();
-		static bool _enabled = false;
-		public static bool IsEnabled {get{ lock (myLock) return _enabled;}}
-		public static void Toggle() {lock (myLock) _enabled = !_enabled;}
-		public static void Disable() {lock (myLock) _enabled = false;}
+		public static bool IsEnabled {get; private set;}
+		public static void Toggle() {IsEnabled = ! IsEnabled;}
+		public static void Disable() {IsEnabled = false;}
 
-		static bool _repeat = false;
-		public static void ToggleRepeat() {lock (myLock) _repeat = !_repeat;}
-		public static bool IsRepeatEnabled {get{lock (myLock) return _repeat;}}
+		public static bool IsRepeatEnabled {get; private set;}
+		public static void ToggleRepeat() {IsRepeatEnabled = !IsRepeatEnabled;}
 	}
 }
